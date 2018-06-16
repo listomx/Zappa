@@ -514,6 +514,7 @@ class Zappa(object):
             if minify:
                 # Related: https://github.com/Miserlou/Zappa/issues/744
                 excludes = ZIP_EXCLUDES + exclude + [split_venv[-1]]
+                print('exclude = %s' % excludes)
                 copytree(cwd, temp_project_path, metadata=False, symlinks=False, ignore=shutil.ignore_patterns(*excludes))
             else:
                 copytree(cwd, temp_project_path, metadata=False, symlinks=False)
@@ -582,7 +583,29 @@ class Zappa(object):
 
         if minify:
             excludes = ZIP_EXCLUDES + exclude
+            print('exclude 2 = %s' % excludes)
             copytree(site_packages, temp_package_path, metadata=False, symlinks=False, ignore=shutil.ignore_patterns(*excludes))
+
+            # Copy luajit .so explicitly
+            if slim_handler:
+                lib_dir = os.path.join(temp_project_path, 'lib')
+                os.mkdir(lib_dir)
+                # HACK
+
+                libraries = [
+                    '/usr/lib/x86_64-linux-gnu/libluajit-5.1.so.2',
+                    '/usr/lib/x86_64-linux-gnu/libjpeg.so.8',
+                    '/usr/lib/x86_64-linux-gnu/libv4l2.so.0',
+                    '/usr/lib/x86_64-linux-gnu/libv4lconvert.so.0',
+                    '/usr/lib/x86_64-linux-gnu/libgfortran.so.3',
+                    '/usr/lib/x86_64-linux-gnu/libquadmath.so.0',
+                    '/usr/lib/libcblas.so.3',
+                    '/usr/lib/libatlas.so.3',
+                    '/usr/lib/libzbar.so.0',
+                ]
+                for path in libraries:
+                    print('Copying %s...' % path)
+                    shutil.copy(path, os.path.join(lib_dir, os.path.basename(path)))
         else:
             copytree(site_packages, temp_package_path, metadata=False, symlinks=False)
 
@@ -592,6 +615,7 @@ class Zappa(object):
             egg_links.extend(glob.glob(os.path.join(site_packages_64, '*.egg-link')))
             if minify:
                 excludes = ZIP_EXCLUDES + exclude
+                print('excludes 3 = %s' % excludes)
                 copytree(site_packages_64, temp_package_path, metadata = False, symlinks=False, ignore=shutil.ignore_patterns(*excludes))
             else:
                 copytree(site_packages_64, temp_package_path, metadata = False, symlinks=False)
@@ -652,9 +676,14 @@ class Zappa(object):
             print("Packaging project as gzipped tarball.")
             archivef = tarfile.open(archive_path, 'w|gz')
 
+        print('excludes 4 = %s' % excludes)
         for root, dirs, files in os.walk(temp_project_path):
+            excluded_files = shutil.ignore_patterns(*excludes)(root, files)
 
             for filename in files:
+                if filename in excluded_files:
+                    print('Skipping %s' % filename)
+                    continue
 
                 # Skip .pyc files for Django migrations
                 # https://github.com/Miserlou/Zappa/issues/436

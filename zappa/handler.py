@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import sys
+import shutil
 import traceback
 import tarfile
 
@@ -118,7 +119,7 @@ class LambdaHandler(object):
                 except ImportError:
                     print ("Failed to import cytpes library")
 
-            # This is a non-WSGI application
+           # This is a non-WSGI application
             # https://github.com/Miserlou/Zappa/pull/748
             if not hasattr(self.settings, 'APP_MODULE') and not self.settings.DJANGO_SETTINGS:
                 self.app_module = None
@@ -227,6 +228,13 @@ class LambdaHandler(object):
         Given a modular path to a function, import that module
         and return the function.
         """
+        print 'sys.path within import = %s' % sys.path
+        import os
+
+        if any(p.startswith('/tmp/') for p in sys.path):
+            from django.conf import settings
+            print 'Imported'
+
         module, function = whole_function.rsplit('.', 1)
         app_module = importlib.import_module(module)
         app_function = getattr(app_module, function)
@@ -235,6 +243,7 @@ class LambdaHandler(object):
     @classmethod
     def lambda_handler(cls, event, context):  # pragma: no cover
         handler = cls()
+        os.environ.setdefault("DJANGO_SETTINGS_MODULE", handler.settings.DJANGO_SETTINGS)
         exception_handler = handler.settings.EXCEPTION_HANDLER
         try:
             return handler.handler(event, context)
@@ -414,7 +423,8 @@ class LambdaHandler(object):
                 result = self.run_function(app_function, event, context)
                 logger.debug(result)
             else:
-                logger.error("Cannot find a function to process the triggered event.")
+                logger.error("Cannot find a function to process the triggered event (%s, %s)",
+                             self.settings.AWS_EVENT_MAPPING, records[0])
             return result
 
         # this is an AWS-event triggered from Lex bot's intent
